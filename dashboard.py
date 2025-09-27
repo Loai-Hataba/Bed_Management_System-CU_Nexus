@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()                   # loads .env from project root
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("GOOGLE_API")
 
 if not API_KEY:
     raise RuntimeError("API_KEY not set — copy .env.example to .env and add your key")
@@ -20,7 +20,7 @@ print("API key loaded (masked):", masked)
 genai.configure(api_key="")
 
 # DB Helper Functions
-DB_PATH = "CU_Nexus_Ai/RFID.db"
+DB_PATH = "RFID.db"
 
 def run_query(query, params=()):
     conn = sqlite3.connect(DB_PATH)
