@@ -1,0 +1,89 @@
+-- database: ./RFID.db
+
+
+
+Delete from BedLogs;
+select * from Patients;
+
+
+INSERT INTO Medications (Medicine_name, Available)
+VALUES
+    ('Paracetamol', 1),     -- pain relief, fever
+    ('Ibuprofen', 1),       -- anti-inflammatory
+    ('Amoxicillin', 1),     -- antibiotic
+    ('Ciprofloxacin', 0),   -- antibiotic, not available
+    ('Metformin', 1),       -- diabetes
+    ('Atorvastatin', 1),    -- cholesterol
+    ('Omeprazole', 1),      -- acid reflux
+    ('Losartan', 0),        -- blood pressure, out of stock
+    ('Aspirin', 1),         -- blood thinner, pain relief
+    ('Salbutamol', 1);      -- inhaler for asthma
+
+
+UPDATE Beds SET patient_id = NULL WHERE Bed_id = 3;
+Select Bed_id FROM Patients WHERE UID = "DAB1C5B2";
+
+
+INSERT INTO Patients (UID, Name, Phone, Age, BloodType, Admission_reason, Family_history_disease, Diagnosis, Expected_Recovery, Bed_id) VALUES
+('C41E9A7B', 'Ahmed Mahmoud', '01012345678', 34, 'A+', 'Leg fracture', 'None', 'Internal fixation with plates and screws', '2025-11-08', 11),
+('9FD2B608', 'Mona Abdallah', '01187654321', 27, 'O-', 'Pneumonia', 'Asthma in family', 'Moderate pneumonia', '2025-10-07', 12),
+('E73AB4C1', 'Youssef Ali', '01211223344', 45, 'B+', 'Chest pain', 'Hypertension in family', 'Stable angina', '2025-10-18', 13),
+('5A8CF3D2', 'Fatma Hassan', '01599887766', 30, 'AB+', 'High fever', 'None', 'Viral infection', '2025-10-04', 4),
+('B9E41F07', 'Mohamed Ibrahim', '01055667788', 52, 'O+', 'Severe headache', 'Diabetes in family', 'High blood pressure', '2025-10-11', 5),
+('7D32ACFE', 'Sara Ali', '01133445566', 19, 'A-', 'Abdominal pain', 'Stomach ulcer in family', 'Appendicitis', '2025-10-04', 6),
+('4F0B89C3', 'Khaled Mostafa', '01266778899', 38, 'B-', 'Shoulder injury', 'None', 'Dislocated shoulder', '2025-10-25', 7),
+('D6172BAE', 'Laila Ahmed', '01044556677', 29, 'A+', 'General fatigue', 'Anemia in family', 'Moderate anemia', '2025-10-27', 8),
+('8C5FD940', 'Amr Hassan', '01522113344', 41, 'O+', 'Back pain', 'Disc herniation in family', 'Herniated disc', '2025-11-08', 9),
+('FA31B62D', 'Noha Mohamed', '01177889900', 36, 'AB-', 'Sore throat', 'Seasonal allergies in family', 'Tonsillitis', '2025-10-02', 10);
+
+---------------------------------------------------------
+CREATE TABLE "Patients"(
+    UID TEXT PRIMARY KEY UNIQUE,
+    Name TEXT,
+    Phone TEXT,
+    Age INTEGER NOT NULL,
+    BloodType TEXT NOT NULL,
+    Admission_reason TEXT,
+    Family_history_disease TEXT,
+    Diagnosis TEXT,
+    Expected_Recovery TEXT,
+    Bed_id INTEGER REFERENCES Beds(Bed_id)
+);
+
+CREATE TABLE "PatientMedication"(
+    patient_id TEXT REFERENCES Patients(UID),
+    medicine_id INTEGER REFERENCES Medications(medicine_id),
+    current_medication Boolean,
+    PRIMARY KEY (patient_id, medicine_id)
+);
+
+CREATE TABLE Medications(
+    medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medicine_name TEXT,
+    available Boolean
+);
+
+CREATE TABLE "Investigations"(
+    investigation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id TEXT NOT NULL REFERENCES Patients(UID),
+    investigation_type TEXT,
+    result TEXT,
+    date Text DEFAULT(date('now', '+3 hours'))
+);
+
+
+CREATE TABLE "Beds"(
+    Bed_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    Room_id INTEGER NOT NULL,
+    patient_id TEXT REFERENCES Patients(UID)
+);
+
+CREATE TABLE BedLogs(
+Bed_id INTEGER,
+patient_id TEXT,
+On_bed BOOLEAN,
+log_time TEXT,
+FOREIGN KEY (patient_id) REFERENCES Patients(UID),
+FOREIGN KEY (Bed_id) REFERENCES Beds(Bed_id),
+PRIMARY KEY (patient_id, Bed_id, log_time)
+);
