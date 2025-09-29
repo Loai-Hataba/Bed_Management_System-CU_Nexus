@@ -5,21 +5,14 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
-load_dotenv()                   # loads .env from project root
+load_dotenv()
 API_KEY = os.getenv("GOOGLE_API")
 
 if not API_KEY:
     raise RuntimeError("API_KEY not set — copy .env.example to .env and add your key")
 
-# Use safely — don't print the full key
-masked = API_KEY[:4] + "..." + API_KEY[-4:] if len(API_KEY) > 8 else "****"
-print("API key loaded (masked):", masked)
+genai.configure(api_key=API_KEY)
 
-
-# CONFIG: Gemini API Key
-genai.configure(api_key="")
-
-# DB Helper Functions
 DB_PATH = "RFID.db"
 
 def run_query(query, params=()):
@@ -203,17 +196,17 @@ with tabs[2]:
 # Chat Assistant Tab
 # FIXME:
 # ------------------------
-# with tabs[3]:
-#     st.subheader("💬 AI Chat Assistant")
+with tabs[3]:
+    st.subheader("💬 AI Chat Assistant")
 
-#     if "chat_history" not in st.session_state:
-#         st.session_state.chat_history = []
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-#     user_input = st.text_input("Ask a question...")
-#     if st.button("Send") and user_input:
-#         reply = chat_with_llm(user_input)
-#         st.session_state.chat_history.append(("User", user_input))
-#         st.session_state.chat_history.append(("AI", reply))
+    user_input = st.text_input("Ask a question...")
+    # if st.button("Send") and user_input:
+        # reply = chat_with_llm(user_input)
+        # st.session_state.chat_history.append(("User", user_input))
+        # st.session_state.chat_history.append(("AI", reply))
 
-#     for role, msg in st.session_state.chat_history:
-#         st.markdown(f"**{role}:** {msg}")
+    # for role, msg in st.session_state.chat_history:
+    #     st.markdown(f"**{role}:** {msg}")

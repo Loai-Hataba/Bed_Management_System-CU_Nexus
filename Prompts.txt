@@ -1,0 +1,559 @@
+Below is a single, exhaustive prompt you can paste to an engineer/assistant (or use as a spec) to generate the Python script you asked for. It lists **every requirement**, data rules, constraints, schema references, distributions, correlations, outputs, validations and comment/logging expectations. I did not omit anything we discussed.
+
+---
+
+**Prompt: Generate a reproducible Python script that builds and populates a synthetic neuro-department SQLite database**
+
+Write a single, well-documented, runnable Python script that **creates** an SQLite database file and **populates every table** in this schema with realistic, reproducible, synthetic data suitable for ML training. The script must follow the exact schema below (create tables if they don't already exist) and must implement all data-generation rules, distributions, correlations and constraints described later.
+
+**Goal / purpose**
+
+* Produce realistic synthetic data for the given neuro department schema so an ML model trained on `PatientFeatures.recovery_days` will learn meaningful (but not perfect) relationships. Inject controlled noise and missingness to avoid overfitting.
+* Save the data to an SQLite file and (optionally) export table CSVs for easy inspection/modeling.
+* Include detailed comments and print/logging at each step explaining what the code does, why choices were made, and what the generated values mean.
+
+---
+
+## 1) Environment & execution
+
+* Use Python 3.10+ standard libs plus `numpy` (allowed). Do not require network access.
+* The script must be runnable as `python generate_synthetic_neuro.py`.
+* Use `sqlite3` builtin module to create and manipulate the DB.
+* Use a fixed random seed for reproducibility (seed = `0`).
+* Remove any existing DB file at the target path at start (so repeated runs are reproducible). But also include a command-line flag or a top-level variable to switch to "append" mode if desired (optional).
+* Default output DB path: `/mnt/data/synthetic_neuro.db`. Print final path.
+
+---
+
+## 2) Schema (create tables if not exists)
+
+Create tables exactly matching the schema below. Use `IF NOT EXISTS` so running script repeatedly is safe. Use `PRAGMA foreign_keys = ON`.
+
+Paste and use this schema exactly (match column names and types):
+
+```
+CREATE TABLE Patients(
+    UID TEXT PRIMARY KEY UNIQUE,
+    Name TEXT,
+    Phone TEXT,
+    Age INTEGER NOT NULL,
+    Sex TEXT,
+    BloodType TEXT NOT NULL,
+    Admission_reason TEXT,
+    Family_history_disease TEXT,
+    Diagnosis TEXT,
+    Expected_Recovery TEXT
+);
+
+CREATE TABLE PatientMedication(
+    patient_id TEXT REFERENCES Patients(UID),
+    medicine_id INTEGER REFERENCES Medications(medicine_id),
+    current_medication INTEGER,
+    PRIMARY KEY (patient_id, medicine_id)
+);
+
+CREATE TABLE Medications(
+    medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medicine_name TEXT,
+    available INTEGER
+);
+
+CREATE TABLE Beds(
+    Bed_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    Room_id INTEGER NOT NULL
+);
+
+CREATE TABLE Admissions (
+  admission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  bed_id INTEGER REFERENCES Beds(Bed_id),
+  admission_date TEXT NOT NULL,
+  discharge_date TEXT,
+  admission_reason TEXT,
+  diagnosis TEXT,
+  status TEXT CHECK(status IN ('admitted','discharged','transferred','expired')) DEFAULT 'admitted',
+  primary_surgeon TEXT,
+  preop_done INTEGER DEFAULT 0
+);
+
+CREATE TABLE DiagnosisCodes (
+  code TEXT PRIMARY KEY,
+  description TEXT
+);
+
+CREATE TABLE InvestigationTypes (
+  type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE,
+  name TEXT,
+  category TEXT
+);
+
+CREATE TABLE ImagingTypes (
+  imaging_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE,
+  name TEXT
+);
+
+CREATE TABLE Investigations(
+  investigation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  type_id INTEGER REFERENCES InvestigationTypes(type_id),
+  result_text TEXT,
+  result_value REAL,
+  unit TEXT,
+  abnormal INTEGER DEFAULT 0,
+  date TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE LabResults (
+  lab_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  test_name TEXT,
+  test_code TEXT,
+  value REAL,
+  unit TEXT,
+  normal_low REAL,
+  normal_high REAL,
+  abnormal INTEGER DEFAULT 0,
+  date TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE NeurologicalScales (
+  scale_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  gcs_eye INTEGER,
+  gcs_verbal INTEGER,
+  gcs_motor INTEGER,
+  gcs_total INTEGER,
+  wfns_grade INTEGER,
+  stop_snore INTEGER,
+  stop_tired INTEGER,
+  stop_observed INTEGER,
+  stop_bp INTEGER,
+  stop_bmi INTEGER,
+  stop_age INTEGER,
+  stop_neck INTEGER,
+  stop_gender INTEGER,
+  stopbang_score INTEGER,
+  date TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE Comorbidities (
+  patient_id TEXT REFERENCES Patients(UID),
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  comorbidity TEXT,
+  present INTEGER DEFAULT 0,
+  PRIMARY KEY (patient_id, admission_id, comorbidity)
+);
+
+CREATE TABLE RiskFactors (
+  factor_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  bmi REAL,
+  neck_circumference REAL,
+  smoker INTEGER DEFAULT 0,
+  pregnancy INTEGER DEFAULT 0,
+  allergy_contrast INTEGER DEFAULT 0,
+  airway_difficulty INTEGER DEFAULT 0,
+  date TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE PreoperativeChecklist (
+  checklist_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT NOT NULL REFERENCES Patients(UID),
+  bp_systolic INTEGER,
+  bp_diastolic INTEGER,
+  ecg_abnormal INTEGER DEFAULT 0,
+  airway_assessment TEXT,
+  pregnancy_test INTEGER DEFAULT 0,
+  coag_pt REAL,
+  coag_inr REAL,
+  coag_aptt REAL,
+  blood_sugar REAL,
+  date TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE PatientFeatures (
+  feature_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT REFERENCES Patients(UID),
+  age INTEGER,
+  sex TEXT,
+  bmi REAL,
+  blood_type TEXT,
+  gcs_total INTEGER,
+  wfns_grade INTEGER,
+  stopbang_score INTEGER,
+  sodium REAL,
+  potassium REAL,
+  creatinine REAL,
+  gfr REAL,
+  alt REAL,
+  ast REAL,
+  bilirubin REAL,
+  hemoglobin REAL,
+  wbc REAL,
+  platelets REAL,
+  blood_sugar REAL,
+  num_medications INTEGER,
+  num_investigations INTEGER,
+  imaging_abnormal_count INTEGER,
+  comorbidity_count INTEGER,
+  severity_score INTEGER,
+  admission_date TEXT,
+  discharge_date TEXT,
+  recovery_days INTEGER,
+  predicted_recovery_days INTEGER,
+  prediction_timestamp TEXT,
+  model_version TEXT,
+  prediction_confidence REAL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE Predictions (
+  prediction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admission_id INTEGER REFERENCES Admissions(admission_id),
+  patient_id TEXT REFERENCES Patients(UID),
+  predicted_recovery_days INTEGER,
+  predicted_discharge_date TEXT,
+  model_version TEXT,
+  confidence REAL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+---
+
+## 3) High-level generation parameters (use these exact defaults unless directed otherwise)
+
+* `NUM_PATIENTS = 1000`
+* Admissions: target ~1200 admissions (some patients may have 1–2 admissions). Achieve **~80% discharged** and **~20% still admitted** across all admissions.
+* `YEARS = 2` (admission dates are uniformly distributed across the past 2 years up to `now`).
+* `NUM_BEDS = 100`, `NUM_ROOMS = 5` (assign beds to rooms cyclically).
+* `NUM_MEDICATIONS = 30` (populate `Medications` table with 30 realistic drug names).
+* Fixed seed: `random.seed(0)` and `numpy.random.seed(0)` (script must set both).
+* Missingness & noise:
+
+  * For optional labs and some fields, use **15% missingness** (`MISSING_RATE_LAB = 0.15`).
+  * Measurement noise: multiply continuous labs by `1 + Normal(0, 0.05)` (5% SD).
+* Outliers: inject long-stay outliers for ~2% of admissions (+10–60 days).
+* Units and ranges: use these realistic lab ranges (exact):
+
+  * Sodium: (135,145) mEq/L
+  * Potassium: (3.5,5.1) mEq/L
+  * Creatinine: (0.6,1.3) mg/dL
+  * GFR: (60,120) mL/min/1.73m²
+  * ALT: (7,56) U/L
+  * AST: (10,40) U/L
+  * Bilirubin: (0,1.2) mg/dL
+  * Hemoglobin: (12,17.5) g/dL
+  * WBC: (4.0,11.0) 10^3/uL
+  * Platelets: (150,450) 10^3/uL
+  * Blood_Sugar: (70,140) mg/dL
+  * PT: (11,13.5) sec, INR: (0.8,1.2), aPTT: (25,40) sec
+
+---
+
+## 4) Names, phones, demographics
+
+* Use **Egyptian-style** synthetic names. Include lists for male and female first names and Egyptian last names.
+* Phone format: Egyptian mobile 11-digit starting with `010`, `011`, `012`, or `015` followed by 8 digits.
+* `Age`: sample from a distribution skewed older, but allow children:
+
+  * Use `Age = round(clip(Normal(mean=62, sd=18), 0, 95))`.
+* `Sex`: sample `M` or `F` roughly 50/50.
+* `BloodType`: random uniform among `["A+","A-","B+","B-","O+","O-","AB+","AB-"]`.
+* `BMI`: sample Normal(mean=27, sd=5), clipped to 12–50.
+* Enforce logical constraints:
+
+  * Pregnancy only when `Sex == 'F'` and `Age` between 12 and 50.
+  * Males cannot be pregnant.
+  * Age must be integer and between 0 and 95.
+  * Neck circumference derived from BMI (approx): `neck ≈ 35 + 0.5*(BMI - 25) + N(0,2)`, clipped to 25–60 cm.
+
+---
+
+## 5) Diagnosis distribution (use these exact frequencies)
+
+* Ischemic stroke: 30%
+* Hemorrhagic stroke: 10%
+* Brain tumor: 15%
+* Epilepsy / Seizure: 15%
+* Migraine / Headache: 10%
+* Parkinsons / Movement disorder: 5%
+* Other: 15%
+
+Insert the diagnosis into `Patients.Diagnosis` on creation (this is the patient's primary diagnosis used for the admission unless overridden).
+
+---
+
+## 6) Medications & lookup tables
+
+* Populate `Medications` with 30 realistic drug names (include antiplatelets, anticoagulants, antiepileptics, antihypertensives, statins, steroids, antidiabetics, analgesics).
+* Populate `InvestigationTypes` with the full list (exact codes and categories): `SODIUM`, `POTASSIUM`, `CREATININE`, `GFR`, `ALT`, `AST`, `BILIRUBIN`, `HEMOGLOBIN`, `WBC`, `PLATELETS`, `BLOOD_SUGAR`, `PT`, `INR`, `APTT`, `ECG`, `CT_BRAIN`, `MRI_BRAIN`, `ANGIO`, `EEG`, `GCS`, `WFNS`, `STOPBANG`.
+* Populate `ImagingTypes` with `CT_BRAIN`, `MRI_BRAIN`, `ANGIO`, `DOPPLER`.
+
+---
+
+## 7) Beds & rooms
+
+* Create 100 beds and distribute them across 5 rooms (Room_id = 1..5 cyclically).
+* When creating admissions, pick a bed id (you may reuse beds historically — we will not enforce strict simultaneous occupancy constraints for simplicity). Document this decision in comments.
+
+---
+
+## 8) Admissions creation rules
+
+* Each patient: generate 1 admission, with 20% chance of a second admission (so ~1200 admissions total).
+* Assign `admission_date` uniformly across the past 2 years.
+* Decide `status` by sampling to meet ~80% discharged: prefer to sample and then adjust edge cases so that discharge_date never lies in the future (relative to script `now`). If discharge would fall after `now`, mark the record as `admitted` and set `discharge_date = NULL`.
+* For discharged admissions:
+
+  * Compute a synthetic `severity_score` influenced by diagnosis and age; use a reproducible method, e.g.:
+
+    * Draw `base_severity` from diagnosis-specific integer range (given below).
+    * Add `age_factor = int((age - 60) / 20)` (can be negative).
+    * `severity_score = clip(base_severity + age_factor + small_noise, 1, 20)`.
+  * Convert `severity_score` into `recovery_days` using a realistic mapping:
+
+    * Example: `recovery_days = max(1, round( Normal(loc=severity_score*1.5, sd=3) + diagnosis_median ) )`.
+    * Use diagnosis medians (approx): Ischemic stroke 10, Hemorrhagic stroke 15, Brain tumor 12, Epilepsy 4, Migraine 2, Parkinsons 8, Other 7.
+  * Inject outliers: with 2% probability, add 10–60 extra days.
+
+**Diagnosis-specific base severity ranges (exact values to use)**
+
+* Ischemic stroke: 6–12
+
+* Hemorrhagic stroke: 8–20
+
+* Brain tumor: 5–15
+
+* Epilepsy/Seizure: 2–8
+
+* Migraine/Headache: 1–3
+
+* Parkinsons/Movement disorder: 3–10
+
+* Other: 2–12
+
+* `primary_surgeon`: pick from a short list of realistic names.
+
+* `preop_done`: 85% chance = 1, else 0.
+
+---
+
+## 9) Comorbidities generation
+
+* For each admission, insert rows into `Comorbidities` for the comorbidity list with these prevalences:
+
+  * hypertension: 40%
+  * diabetes: 20%
+  * ischemic_heart_disease: 10%
+  * chronic_kidney_disease: 5%
+  * copd: 8%
+* Store `present` as 0 or 1.
+
+---
+
+## 10) RiskFactors generation
+
+* Insert a `RiskFactors` row for each admission:
+
+  * `bmi` as above, `neck_circumference` derived from BMI.
+  * `smoker` true with 20% chance.
+  * `pregnancy` true only when `Sex == 'F'` and `Age` in [12,50] with 8% chance.
+  * `allergy_contrast` true with 3% chance.
+  * `airway_difficulty` true with 5% chance.
+  * `date` = admission_date.
+
+---
+
+## 11) NeurologicalScales
+
+* Generate GCS components (`gcs_eye` 1–4, `gcs_verbal` 1–5, `gcs_motor` 1–6) using safe bounds derived from `severity_score`.
+
+  * Example method: `base_gcs = max(3, 15 - int(severity_score / 1.5))`.
+  * Then sample each component within a small window around `base_gcs`, ensuring valid integer ranges.
+* `gcs_total = gcs_eye + gcs_verbal + gcs_motor`.
+* `wfns_grade` only meaningful for hemorrhagic stroke: sample from 1–5 with mean ~3.
+* STOP-BANG: compute components (snore, tired, observed, bp, bmi, age, neck, gender) as 0/1 based on risk factors and thresholds; `stopbang_score` = sum of components.
+* Insert one NeurologicalScales row per admission with the `date` = `admission_date`.
+
+---
+
+## 12) LabResults generation
+
+* For each admission, generate lab rows for the tests in the lab ranges above. For each lab:
+
+  * With probability = `MISSING_RATE_LAB` (15%), skip (simulate missing labs).
+  * Otherwise sample uniform in normal range or use `np.random.uniform(low, high)`.
+  * Apply measurement noise: multiply by `1 + Normal(0, 0.05)`.
+  * For higher severity (e.g., `severity_score > 12`), bias some labs toward abnormal (e.g., creatinine up, GFR down, WBC up) using a small multiplicative factor.
+  * Set `abnormal` = 1 if value outside normal range.
+  * Insert into `LabResults` with `test_name`, `test_code` (uppercase, underscores), `unit`, `normal_low`, `normal_high`, `date` = `admission_date`.
+
+---
+
+## 13) Imaging and Investigations
+
+* For each admission, create 0–2 imaging investigations (distribution: 20% none, 50% one, 30% two).
+* For imaging type selection, prefer `CT_BRAIN`, `MRI_BRAIN`, `ANGIO`, `DOPPLER`.
+* Probability of abnormal imaging:
+
+  * If diagnosis in [Ischemic stroke, Hemorrhagic stroke, Brain tumor] → ~60% abnormal.
+  * Otherwise → ~15% abnormal.
+* `Investigations` should also store `GCS` and `STOPBANG` records (use `InvestigationTypes` lookup) as numeric `result_value`.
+* Use `InvestigationTypes` `type_id` mapping for inserted rows.
+
+---
+
+## 14) PreoperativeChecklist
+
+* For each admission insert a PreoperativeChecklist row with:
+
+  * `bp_systolic` ~ Normal(130,20) clipped to [80,220]
+  * `bp_diastolic` ~ Normal(80,12) clipped to [40,140]
+  * `ecg_abnormal` true with 8% probability
+  * `airway_assessment` chosen from ["easy","difficult","unknown"]
+  * `pregnancy_test` set to pregnancy flag (0/1) only for females
+  * `coag_pt`, `coag_inr`, `coag_aptt` sampled around normal ranges with small noise
+  * `blood_sugar` ~ Normal(100,30) clipped to [40,400]
+  * `date` = `admission_date`
+
+---
+
+## 15) PatientMedication assignment
+
+* For each admission, assign `num_meds` correlated with `comorbidity_count` and `severity_score`:
+
+  * Example: sample from a Poisson with lambda = `1 + comorbidity_count*0.8 + severity_score/10`, clipped to 0–6.
+* Randomly select that many distinct medication IDs from `Medications` and insert into `PatientMedication` with `current_medication = 1`.
+* Use `INSERT OR IGNORE` to avoid duplicate (patient, med) pairs across admissions.
+
+---
+
+## 16) PatientFeatures generation (ML-ready)
+
+* After populating all relevant tables, generate one `PatientFeatures` row per **discharged** admission only (these are training examples).
+* Fields to fill exactly as:
+
+  * `admission_id`, `patient_id`
+  * `age`, `sex`, `bmi`, `blood_type`
+  * `gcs_total`, `wfns_grade`, `stopbang_score`
+  * lab fields: `sodium`, `potassium`, `creatinine`, `gfr`, `alt`, `ast`, `bilirubin`, `hemoglobin`, `wbc`, `platelets`, `blood_sugar` → use the **most recent** lab before discharge for each test (or the lab on admission).
+  * `num_medications`, `num_investigations` (count rows)
+  * `imaging_abnormal_count` (count of `Investigations` with `abnormal`=1)
+  * `comorbidity_count` (count of `Comorbidities.present = 1`)
+  * `severity_score` computed if possible using a reproducible composite (explicit formula below)
+  * `admission_date`, `discharge_date`, `recovery_days` = integer days between discharge and admission
+  * leave prediction columns (`predicted_recovery_days`, etc.) NULL for synthetic training data.
+* **Severity_score formula (explicit and deterministic):**
+
+  * If `gcs_total` exists: `severity_score = max(1, min(20, round( (20 - gcs_total) + 0.8 * comorbidity_count + 0.5 * abnormal_lab_count + age_factor )))`
+
+    * where `abnormal_lab_count` = count of labs with `abnormal=1` among the key labs, and `age_factor = int(max(0, (age - 60) / 20))`.
+  * Else fallback to earlier `severity_score` saved for the admission or to `clip(round(Normal(5,2)),1,20)`.
+* Insert the `PatientFeatures` rows via parameterized SQL and commit.
+
+---
+
+## 17) Validations & integrity checks (script must print these)
+
+After generation, run and print these checks:
+
+1. Counts: `Patients == 1000`, `Beds == 100`, `Medications == 30`.
+2. Admissions: print total admissions and % discharged (must be ~80% — print exact percent).
+3. PatientFeatures rows equal to number of discharged admissions (print both).
+4. No discharge dates after script `now` (if found, print and fix by re-classifying admission as `admitted` and `discharge_date = NULL`).
+5. No pregnancy flagged for males; no pregnancy for females outside 12..50 (if any, print and fix).
+6. Print samples: `SELECT * FROM PatientFeatures ORDER BY RANDOM() LIMIT 5;` and show these rows in stdout.
+7. Print summary statistics for `recovery_days` (min, median, mean, 90th percentile) to show variability.
+
+---
+
+## 18) Idempotency, transactions & performance
+
+* Use `conn.commit()` at sensible points and use transactions for large inserts (e.g., wrap admissions and related inserts in a transaction).
+* Use `INSERT OR IGNORE` for lookup/population where appropriate.
+* The script should create indexes to speed up lookups (optional):
+
+  * Index on `Admissions(patient_id)`, `LabResults(admission_id, test_name)`, `Investigations(admission_id)`, `NeurologicalScales(admission_id)`.
+
+---
+
+## 19) Additional deliverables & optional outputs
+
+* Export each table to CSV files in the same folder as the DB (e.g., `/mnt/data/patients.csv`, `/mnt/data/patientfeatures.csv`) — make this optional via a flag or a top-level boolean variable.
+* Print the DB path and CSV paths at the end.
+* Print a short text explanation of how synthetic relationships were injected and where noise/missingness were applied.
+
+---
+
+## 20) Error handling & documentation
+
+* The script must:
+
+  * validate required Python packages at startup and print an actionable error if `numpy` is missing.
+  * handle any SQL errors gracefully (print a stack trace and a helpful message).
+  * include copious inline comments explaining why each block exists, and small `print()` statements that narrate progress (e.g., "Creating Patients (1000) …", "Inserting LabResults (approx N rows)…", "Generating PatientFeatures…").
+
+---
+
+## 21) Final console output (exact items to print)
+
+At script end print:
+
+* `Database created at: <path>`
+* Counts: `Patients: X`, `Admissions: Y (discharged Z%, admitted W%)`, `Beds: 100`, `Medications: 30`
+* `Lab rows: N`, `Investigations rows: M`, `PatientFeatures (discharged): K`
+* `Recovery days stats: min, median, mean, 90th percentile`
+* Example `PatientFeatures` rows (5 random)
+* Note: `Random seed = 0` and `Date range = [YYYY-MM-DD] to [YYYY-MM-DD]` (print these).
+
+---
+
+## 22) Extra small-but-important constraints / edge-cases to implement
+
+* If an admission’s computed discharge date falls after `now`, mark the admission as `admitted` with `discharge_date = NULL`.
+* Ensure `recovery_days` stored in PatientFeatures are integers ≥ 1 for discharged admissions.
+* Avoid impossible lab values (clip to physical ranges if any randomization tries to exceed realistic bounds).
+* If a patient has repeated admissions, allow `PatientMedication` to be present across admissions, but `PatientFeatures` is per-admission (one training row per discharged admission).
+* When inserting `Investigations` rows that reference `InvestigationTypes`, use `SELECT type_id FROM InvestigationTypes WHERE code = ?` to find IDs; if a code is missing, `INSERT` it first.
+
+---
+
+## 23) Code style & comments
+
+* The script must be readable and pedagogical: group into functions (e.g., `create_schema()`, `populate_medications()`, `generate_patients()`, `generate_admissions()`, `generate_labs_and_investigations()`, `build_patient_features()`, `validate_db()`).
+* Each function must start with a docstring explaining what it does and any important choices.
+* Provide inline comments explaining medical reasoning for correlations (e.g., “higher severity -> higher creatinine probability because CKD and worse physiology”).
+
+---
+
+## 24) Deliverables you should produce (what I expect back)
+
+* A single file `generate_synthetic_neuro.py` that implements everything above and prints the required summary at the end.
+* The script must create `/mnt/data/synthetic_neuro.db` and (optionally) CSV exports.
+* The script must run from top to bottom without requiring manual DB edits.
+
+---
+
+### NOTES / RATIONALE (include as a short header in the script)
+
+* Explain that synthetic data intentionally includes noise and missingness to avoid overfitting and mirror real clinical datasets.
+* Point out limitations: synthetic data is not PHI, not to be used as real medical evidence; the generated labels are synthetic approximations and should only be used for model prototyping.
+
+---
+
+That is every detail I want the script to follow. Do not skip any item above. The resulting script must be thoroughly commented (explain each correlation and each random choice), reproducible with seed 0, and produce the SQLite DB and summary outputs described.
+
+If anything in my spec seems impossible, or if you need to slightly change any numeric constant for robust generation, make the change but **explicitly document the change in the script header comments**.
+
+---
+
+Would you like me to now generate the full Python file (the script itself) using exactly this spec?

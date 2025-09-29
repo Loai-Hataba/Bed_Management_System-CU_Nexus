@@ -3,3 +3,6 @@ pandas
 google-generativeai
 python-dotenv
 pyserial
+joblib
+scikit-learn
+numpy
