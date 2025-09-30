@@ -31,11 +31,11 @@ CREATE TABLE Medications(
 );
 
 
-
 CREATE TABLE "Beds"(
     Bed_id INTEGER PRIMARY KEY AUTOINCREMENT,
     Room_id INTEGER NOT NULL
 );
+
 
 ---------------------------------------------------------------------
 --                                  NEW
@@ -240,26 +240,6 @@ CREATE TABLE Predictions (
 );
 CREATE INDEX idx_predictions_patient ON Predictions(patient_id);
 
-
-
-CREATE TABLE NFCTags (
-    tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tag_uid TEXT UNIQUE NOT NULL,       -- the unique NFC tag identifier
-    description TEXT                    -- optional, e.g., "wristband #12"
-);
-
--- Table to assign NFC tags to patients
-CREATE TABLE PatientNFCTags (
-    patient_id TEXT REFERENCES Patients(UID),
-    tag_id INTEGER REFERENCES NFCTags(tag_id),
-    assigned_at TEXT DEFAULT (datetime('now', '+3 hours')),
-    active INTEGER DEFAULT 1,           -- 1 = currently assigned, 0 = removed
-    PRIMARY KEY (patient_id, tag_id)
-);
-
--- Indexes for faster lookups
-CREATE INDEX idx_patient_tags_patient ON PatientTagAssignments(patient_id);
-CREATE INDEX idx_patient_tags_tag ON PatientTagAssignments(tag_id);
 
 -----------------------------------------------------------------------------------
 --                                  Inserts
