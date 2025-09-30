@@ -34,6 +34,7 @@ def predict_recovery(admission_id : int):
     conn = sqlite3.connect("RFID.db")
     row = pd.read_sql(f"SELECT * FROM PatientFeatures WHERE admission_id={admission_id}", conn)
 
+    pred_days = 0
     if not row.empty:
         # drop leakage cols
         drop_cols = ["feature_id","admission_id","patient_id","recovery_days",
@@ -44,9 +45,11 @@ def predict_recovery(admission_id : int):
         pred_days = int(model.predict(X_new)[0])
         admission_date = pd.to_datetime(row["admission_date"][0])
         pred_discharge = (admission_date + timedelta(days=pred_days)).strftime("%Y-%m-%d")
+        print(row.keys())
+        bed_id = pd.read_sql(f"SELECT Bed_id from Admissions Where admission_id = ?", conn, params=(admission_id,))
+        bed_id = bed_id["bed_id"].iloc[0]
         print(pred_days)
         print(pred_discharge)
-        print(admission_date)
 
         cursor = conn.cursor()
 
@@ -56,6 +59,10 @@ def predict_recovery(admission_id : int):
         VALUES (?, ?, ?, ?, ?, ?)
         """, (int(row["admission_id"]), row["patient_id"][0],
             pred_days, pred_discharge, "RF_v1.0", 0.85))
+        print(f"yaraaaab : {pred_discharge, bed_id}")
+        cursor.execute("""
+                       Update Beds Set Nearest_vacancy = ? Where Bed_id = ? AND Status = 'Taken'""", (pred_discharge, int(bed_id)))
+        
         conn.commit()
         print(f"Prediction inserted: {pred_days} days, discharge {pred_discharge}")
     return pred_days
