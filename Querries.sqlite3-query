@@ -377,3 +377,5 @@ FROM Admissions a
 JOIN Patients p ON p.UID = a.patient_id
 WHERE a.discharge_date IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM PatientFeatures pf WHERE pf.admission_id = a.admission_id);
+
+

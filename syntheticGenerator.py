@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS PatientFeatures (
   age INTEGER,
   sex TEXT,
   bmi REAL,
+  diagnosis TEXT,
   blood_type TEXT,
   gcs_total INTEGER,
   wfns_grade INTEGER,
@@ -812,6 +813,11 @@ def generate_admissions_and_related(conn: sqlite3.Connection, patients, years=YE
             cur.execute("INSERT OR IGNORE INTO PatientMedication (patient_id, medicine_id, current_medication) VALUES (?,?,?);", (patient_id, med_id, 1))
             med_assignments += 1
 
+
+        cur.execute("SELECT Diagnosis FROM Patients WHERE UID = ?;", (patient_id,))
+        r = cur.fetchone()
+        diagnosis = r[0]
+
         # Save metadata for this admission for later PatientFeatures generation
         admissions_created.append({
             'admission_id': admission_id,
@@ -861,6 +867,7 @@ def build_patient_features(conn: sqlite3.Connection, admissions_created):
         age = adm['age']
         sex = adm['sex']
         bmi = adm['bmi']
+        diagnosis = adm['diagnosis']
         blood_type_row = cur.execute("SELECT BloodType FROM Patients WHERE UID = ?;", (patient_id,)).fetchone()
         blood_type = blood_type_row[0] if blood_type_row else None
         gcs_total = adm['gcs_total']
@@ -917,9 +924,9 @@ def build_patient_features(conn: sqlite3.Connection, admissions_created):
 
         # Insert PatientFeatures row
         cur.execute(
-            "INSERT INTO PatientFeatures (admission_id, patient_id, age, sex, bmi, blood_type, gcs_total, wfns_grade, stopbang_score, sodium, potassium, creatinine, gfr, alt, ast, bilirubin, hemoglobin, wbc, platelets, blood_sugar, num_medications, num_investigations, imaging_abnormal_count, comorbidity_count, severity_score, admission_date, discharge_date, recovery_days) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);",
+            "INSERT INTO PatientFeatures (admission_id, patient_id, age, sex, bmi, diagnosis, blood_type, gcs_total, wfns_grade, stopbang_score, sodium, potassium, creatinine, gfr, alt, ast, bilirubin, hemoglobin, wbc, platelets, blood_sugar, num_medications, num_investigations, imaging_abnormal_count, comorbidity_count, severity_score, admission_date, discharge_date, recovery_days) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);",
             (
-                admission_id, patient_id, age, sex, bmi, blood_type, gcs_total, wfns_grade, stopbang_score,
+                admission_id, patient_id, age, sex, bmi, diagnosis, blood_type, gcs_total, wfns_grade, stopbang_score,
                 lab_values.get('Sodium'), lab_values.get('Potassium'), lab_values.get('Creatinine'), lab_values.get('GFR'), lab_values.get('ALT'), lab_values.get('AST'), lab_values.get('Bilirubin'), lab_values.get('Hemoglobin'), lab_values.get('WBC'), lab_values.get('Platelets'), lab_values.get('Blood_Sugar'),
                 num_medications, num_investigations, imaging_abnormal_count, comorbidity_count, severity_score_comp,
                 adm['admission_date'], adm['discharge_date'], recovery_days
@@ -1112,8 +1119,11 @@ def main():
         if args.append:
             print("Append mode: existing DB will be used (if present).")
 
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_dir = os.path.dirname(db_path)
+    if db_dir:  # only create if there is a directory in the path
+        # Ensure directory exists
+        os.makedirs(db_dir, exist_ok=True)
+
 
     try:
         conn = sqlite3.connect(db_path)

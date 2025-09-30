@@ -557,3 +557,67 @@ If anything in my spec seems impossible, or if you need to slightly change any n
 ---
 
 Would you like me to now generate the full Python file (the script itself) using exactly this spec?
+
+
+
+
+
+
+
+
+
+
+*************************************************
+True
+Removing existing DB at RFID.db for reproducible run...
+Setting PRAGMA foreign_keys = ON
+Creating tables...
+Creating indexes...
+Populating Medications (30)...
+Populating InvestigationTypes and ImagingTypes...
+Creating 100 Beds across 5 rooms...
+Creating Patients (1000) ...
+Generating Admissions, Comorbidities, RiskFactors, NeurologicalScales, LabResults, Investigations, Preop, and PatientMedication...
+Inserting 1196 admissions (expected ~1200) ...
+Inserted: Lab rows ~14227, Investigation rows ~3713, NeurologicalScales ~1196
+Comorbidity rows 5980, RiskFactors 1196, PreopChecklist 1196, Medication assignments 2931
+Generating PatientFeatures for discharged admissions...
+Inserted PatientFeatures rows: 925
+
+--- Validation & summary checks ---
+Patients: 1000
+Beds: 100
+Medications: 30
+Admissions: 1196 (discharged 77.3%, admitted 22.7%)
+PatientFeatures (discharged): 925 (should equal discharged admissions 925)
+No discharge dates after now found.
+Pregnancy flags validated.
+
+Sample PatientFeatures rows (up to 5):
+feature_id,admission_id,patient_id,age,sex,bmi,diagnosis,blood_type,gcs_total,wfns_grade,stopbang_score,sodium,potassium,creatinine,gfr,alt,ast,bilirubin,hemoglobin,wbc,platelets,blood_sugar,num_medications,num_investigations,imaging_abnormal_count,comorbidity_count,severity_score,admission_date,discharge_date,recovery_days,predicted_recovery_days,predicted_discharge_date,model_version,prediction_confidence,created_at
+312,404,P0330,75,F,23.27871509220488,Epilepsy/Seizure,O+,13,,2,146.3712684515093,3.842661868851821,,62.589678778319865,18.700188663677764,9.81780451405119,0.6587508426402484,13.39688225623972,6.855820306758501,,95.07781418259418,3,3,0,2,10,2023-11-20 16:26:44,2023-12-03 16:26:44,13,,,,,2025-09-29 22:14:19
+38,48,P0039,57,M,27.219977557219945,Ischemic stroke,O+,8,,2,135.61708852341138,4.501116719519367,1.20296371892495,62.03584954999883,18.478843903143474,15.709482532877553,1.1569182996348397,14.958272587124037,,226.69842643869967,75.73430233511291,5,3,1,2,14,2025-08-19 20:09:21,2025-09-14 20:09:21,26,,,,,2025-09-29 22:14:19
+227,297,P0245,32,F,20.629935666709404,Ischemic stroke,O-,9,,1,152.92009298036953,3.6464935668352894,0.7090611748609272,,43.499374373007804,19.24990429127205,0.23729729512832362,16.71954831580648,3.9445939265072707,263.12515266532915,78.71278534032609,4,3,0,2,14,2025-01-12 08:12:37,2025-02-07 08:12:37,26,,,,,2025-09-29 22:14:19
+110,142,P0116,79,F,19.962437407695077,Brain tumor,B-,6,,2,151.39894827140506,4.138109681190774,1.2505506434027656,,,27.53026715228915,0.21553433271663858,16.329305244316597,,453.34474221258995,102.77532366489392,2,2,0,2,17,2025-06-30 19:31:22,2025-08-03 19:31:22,34,,,,,2025-09-29 22:14:19
+710,914,P0764,75,F,12.0,Ischemic stroke,O-,11,,2,131.21441873102634,5.122486539980393,0.6213259985826959,104.53562667145347,29.697977431328876,14.111444834067834,0.36861197260486933,14.244416803472456,8.938938399401088,238.46447872285572,143.1432380950395,1,3,1,0,10,2023-12-02 07:14:20,2024-01-15 07:14:20,44,,,,,2025-09-29 22:14:19
+Recovery days stats: min=1, median=20, mean=20.89, 90th=34
+Lab rows: 14227, Investigations rows: 3713, PatientFeatures (discharged): 925
+Database created at: RFID.db
+Random seed = 0 and Date range = [2023-10-01] to [2025-09-30]
+
+--- Final summary (concise) ---
+Database created at: RFID.db
+Patients: 1000
+Admissions: 1196 (discharged 77.3%, admitted 22.7%)
+Beds: 100, Medications: 30
+Lab rows: 14227, Investigations rows: 3713, PatientFeatures (discharged): 925
+Recovery days stats: min=1, median=20, mean=20.89, 90th=34
+Random seed = 0
+Date range = [2023-10-01] to [2025-09-30]
+
+Short explanation of synthetic relationships and noise:
+ - Severity is correlated with diagnosis, age, GCS and comorbidity count. Higher severity tends to increase recovery_days.
+ - Labs were sampled from normal ranges with 15% missingness and measurement noise (5% SD). High severity biases select labs toward abnormal values (e.g., creatinine up, GFR down, WBC up).
+ - 2% of admissions were injected with long-stay outliers (+10-60 days) to simulate rare prolonged admissions.
+ - Imaging abnormality probability is higher for stroke and tumor diagnoses.
+ - PatientMedication counts correlate with comorbidity_count and severity via a Poisson model.

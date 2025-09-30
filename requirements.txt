@@ -6,3 +6,4 @@ pyserial
 joblib
 scikit-learn
 numpy
+matplotlib
